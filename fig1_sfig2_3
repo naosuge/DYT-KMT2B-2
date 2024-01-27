@@ -6,10 +6,14 @@ update.packages()
 
 library(tidyverse)
 library(ggrepel)
-library(pROC)
+library(cowplot)
 
-count <- read.csv("fiji3.csv")
+setwd("/Users/naoto/Library/Mobile Documents/com~apple~CloudDocs/KMT2B/calc/calc2")
+getwd()
+
+count <- read.csv("fiji4.csv")
 case <- read.csv("casesheet.csv")
+
 
 #preparation for matrix
 cols <- c("List","membrane","Standard","H3K4me3","H4","H3K4me3s","H4s","ratio",
@@ -71,13 +75,16 @@ mem <-data.frame(mem, per3.5ul = per3.5ul)
 sum <- rbind(sum, mem)
 }
 
-sum$List <-factor(sum$List, levels=c("St","P001","P002","P003","P004","P005","P006","P007","P008","P009","P010","P011","P012","P013","P014",
-"HC1","HC2","HC3","HC4","DC1","DC2","DC4","DC5","DC6","DC7","DC8","DC9"))
+saveRDS(sum, file = "sum.rds")
+###################################################
+#drawing the regression line
 
 coef <- column_to_rownames(coef, "membrane")
 coef <- round(coef,1)
 
+
 for(i in memn) {
+
 mem2 <- sum[sum$membrane==i,]
 
 # illustrate linear regression for H3K4me3
@@ -116,6 +123,7 @@ title.H4 <- paste(i, "_H4", sep = "")
 plus <- ifelse(coef[i,"H4.align"]<0 ,"", "+")
 label.H4 <- paste("y =", coef[i,"H4.glad"], "x", plus, coef[i,"H4.align"])
 
+
 name <- paste("graph2/",i,"_H4.png", sep = "")
 
 dev.new(width=3, height=3)
@@ -148,119 +156,139 @@ dev.off()
 ##########################################################
 sum <- readRDS("sum.rds")
 
-rownames(sum) <- 1:nrow(sum)
-sum$List <-factor(sum$List, levels=c("St","P001","P002","P003","P004","P005","P006","P007","P008","P009","P010","P011","P012","P013","P014",
+sum <- sum[,-c(3:5,8,10:13)]
+sum <- sum[!sum$List %in% "St",]
+
+#For Sup.Fig.1
+sumb <- inner_join(sumo, case, by ="List")
+sumb$List <-factor(sumb$List, levels=c("P001","P002","P003","P004","P006","P007","P008","P009","P010","P011","P012","P013","P014",
 "HC1","HC2","HC3","HC4","DC1","DC2","DC4","DC5","DC6","DC7","DC8","DC9"))
+sumb$Dx <-factor(sumb$Dx, levels=c("DYT-KMT2B","Control"))
+
+l.dyt <- expression(paste("DYT-", italic("KMT2B")))
+l.ctrl <- paste("Control         ")
 
 dev.new(width=9, height=3)
-ggplot(sum, aes(x=List, y=St_ratio)) + 
+ggplot(sumb, aes(x=List, y=St_ratio, fill=Dx)) + 
   geom_boxplot(outlier.shape = NA) +
   geom_jitter(size = 0.5) +
-  labs(title=NULL, x = NULL, y = "H3K4me3 / H4") +
-  theme_bw()
-ggsave(file = "all.png")
+  labs(title=NULL, x = NULL, y = "H3K4me3 / H4", fill=NULL) +
+  theme_bw()+
+  theme(
+        axis.text.x=element_text(size=10, angle = 45, hjust = 1),
+        legend.text=element_text(size =12))+
+  scale_fill_manual(labels = c(l.dyt, l.ctrl),
+         values = c("deeppink2", "azure4"))
+
+ggsave(file = "box_jitter_color.png")
 dev.off()
 
 
-##########################################################
 suma <- aggregate(St_ratio~List, sumo, FUN=mean)
-
 merge <- inner_join(suma, case, by = "List")
 
-Pt <- merge[grep("P0", merge$List),]
-rownames(Pt) <- 1:nrow(Pt)
-CTRL <- merge[grep("DC|HC", merge$List),]
+##########################################################
 
-Pt <- data.frame(Dx = "DTY-KMT2B", Pt)
-CTRL <- data.frame(Dx = "control", CTRL)
+#For FIG.1A
 
-df <- rbind(Pt, CTRL)
-
-ROC <- roc(Dx ~ St_ratio, data = merge, ci = TRUE)
-ROC
-
-Data: St_ratio in 11 controls (Dx control) > 12 cases (Dx DTY-KMT2B).
-Area under the curve: 0.9167
-95% CI: 0.8058-1 (DeLong)
-
-#ROC, Youden index
-png("ROC_Youden.png", width=350, height=350)
-plot(ROC,
-     identity = TRUE,
-     print.thres = "best",
-     print.thres.best.method="youden",
-     legacy.axes = TRUE
-     )　
-dev.off()
-
-
-#ROC, distance
-png("ROC_dist.png", width=350, height=350)
-plot(ROC,
-     identity = TRUE,
-     print.thres = "best",
-     print.thres.best.method="closest.topleft",
-     legacy.axes = TRUE
-     )
-dev.off()
-
-
-dev.new(width=5, height=3)
-ggplot(merge, aes(x=Age, y=St_ratio, shape=Dx)) + 
+merge$Dx <- factor(merge$Dx, levels = c("Control","DYT-KMT2B"))
+#dev.new(width=5, height=3)
+gg3 <- ggplot(merge, aes(x=Age, y=St_ratio, color=Dx)) + 
   geom_point(size = 2) +
-  scale_shape_manual(values = c(1,18)) +
-  labs(title=NULL, x = "Age (yrs)", y = "H3K4me3 / H4", shape=NULL) +
-  stat_smooth(method = "lm", se = FALSE, colour = "black", linewidth = 0.5) +
-  theme_bw()
-ggsave(file = "age.png")
+   scale_color_manual(labels = c(l.ctrl, l.dyt),
+     values =  c("azure4", "deeppink2"))+
+  labs(title=NULL, x = "Age (years)", y = "H3K4me3 / H4", color=NULL) +
+  stat_smooth(aes(group = factor(Dx)), method = "lm", se = TRUE, 
+  colour = "black", linewidth = 0.5, fill = "ivory3" ) +
+  theme_bw() +
+  theme(axis.title.x = element_text(margin=margin(t=-60)),
+        plot.margin = margin(1, 0.2, 0, 1, "cm")) 
+
+
+#For FIG.1B
+merge$Dx <- factor(merge$Dx, levels = c("DYT-KMT2B","Control"))
+
+# dev.new(width=2, height=3)
+gg4 <- ggplot(merge, aes(x=Dx, y=St_ratio, color=Dx)) + 
+  geom_point(size = 2) +
+   scale_color_manual(values =  c("deeppink2", "azure4"))+
+  scale_x_discrete(labels = c(l.dyt, "Control"))+
+  labs(title=NULL, x = NULL, y = "H3K4me3 / H4", color=NULL) +
+  theme_bw() +
+  theme(legend.position = "none", plot.margin = margin(1, 0.2, 0, 1, "cm"),
+    axis.text.x=element_text(size=10, angle = 45, hjust = 1))+
+  geom_hline(yintercept=c(0.95), linetype = 2, color = "black")
+
+
+#Combine FIG.1A and B
+
+dev.new(width=7, height=4)
+plot_grid(gg4, gg3, align = "h", 
+rel_widths = c(.1, .3),
+labels = c("A", "B"), label_x = .0, label_y = 1, label_size = 20)
+
+ggsave(file = "combined.png")
 dev.off()
 
-#非採用
-dev.new(width=5, height=3)
-ggplot(merge, aes(x=Age, y=St_ratio, shape=Dx)) + 
-  geom_point(size = 2) +
-  labs(title=NULL, x = "Age (yrs)", y = "H3K4me3 / H4", shape=NULL) +
-  theme_bw()
-ggsave(file = "age2.png")
-dev.off()
+##########################################################
+# Age dependencies
 
 dyt <- merge[merge$Dx=="DYT-KMT2B",]
-
 lm <- lm(dyt[,"St_ratio"]~dyt[,"Age"])
 summary(lm)
 
-dev.new(width=5, height=3)
-ggplot(dyt, aes(x=Onset, y=St_ratio)) + 
-  geom_point(size = 2) +
-  labs(title=NULL, x = "Age of onset (yrs)", y = "H3K4me3 / H4", shape=NULL) +
-  stat_smooth(method = "lm", se = FALSE, colour = "black", linewidth = 0.5) +
-  theme_bw()
-ggsave(file = "onset_age.png")
-dev.off()
+pvalue1 <- summary(lm)$coefficients[2,4] %>% round(2)
+l.pvalue1 <- paste("p-value = ", pvalue1)
+
+gg1c <- ggplot(dyt, aes(x=Onset, y=St_ratio)) + 
+  geom_point(size = 2, colour ="deeppink2") +
+  labs(title=NULL, x = "Age of onset (years)", y = "H3K4me3 / H4", shape=NULL) +
+  stat_smooth(method = "lm", se = TRUE, 
+  colour = "black", linewidth = 0.5, fill = "ivory3" ) +
+  theme_bw()+
+  theme(plot.margin = margin(1, 0.2, 0, 1, "cm"))+
+  annotate("text", x=22, y=0.47, label=l.pvalue1)+
+  scale_y_continuous(limits = c(0.45, 1.02))
+
+####################################################################
+# Duration of movement disorders
 
 dur <- dyt$Age - dyt$Onset
 dyt <- data.frame(dyt, duration = dur)
-
 lm <- lm(dyt[,"St_ratio"]~dyt[,"duration"])
 summary(lm)
 
-dev.new(width=5, height=3)
-ggplot(dyt, aes(x=duration, y=St_ratio)) + 
-  geom_point(size = 2) +
-  labs(title=NULL, x = "duration (yrs)", y = "H3K4me3 / H4", shape=NULL) +
-  stat_smooth(method = "lm", se = FALSE, colour = "black", linewidth = 0.5) +
-  theme_bw()
-ggsave(file = "dur_age.png")
-dev.off()
+pvalue2 <- summary(lm)$coefficients[2,4] %>% round(2)
+l.pvalue2 <- paste("p-value = ", pvalue2)
 
+gg2c <- ggplot(dyt, aes(x=duration, y=St_ratio)) + 
+  geom_point(size = 2, colour ="deeppink2") +
+  labs(title=NULL, x = "Duration of movement disorders (years)", y = "H3K4me3 / H4", shape=NULL) +
+  stat_smooth(method = "lm", se = TRUE, 
+  colour = "black", linewidth = 0.5, fill = "ivory3" ) +
+  theme_bw()+
+  theme(plot.margin = margin(1, 0.2, 0, 1, "cm"))+
+  annotate("text", x=17.7, y=0.47, label=l.pvalue2)+
+  scale_y_continuous(limits = c(0.45, 1.02))
+
+
+####################################################################
+
+# color
+# Fig.1C and D
+dev.new(width=7, height=3)
+plot_grid(gg1c, gg2c, align = "h",
+rel_heights = c(.1, .1),
+labels = c("C", "D"), label_x = .0, label_y = 1, label_size = 20)
+
+ggsave(file = "age_duration_color.png")
+dev.off()
 ##########################################################
 #Background of cases
-##########################################################
+#For Table.1
 
 merge$Dx <-factor(merge$Dx, levels=c("DYT-KMT2B","Control"))
 
-
-#age, f:m ratio
 merge %>%
     group_by(Dx) %>%
     summarise(mean = mean(Age), SD = sd(Age))
@@ -272,41 +300,43 @@ tab <- xtabs(~ FM, data = merge[merge$Dx=="DYT-KMT2B",])
 prop.table(tab)
 
 
-#Difference of age
+# differences in age
 age.d <- case[case$Dx=="DYT-KMT2B",]$Age
 age.c <- case[case$Dx=="Control",]$Age
 
-#F-test
+#F test
 var.test(x=age.d,y=age.c)
 
-F = 0.93655, num df = 11, denom df = 11, p-value = 0.9154
+F = 1.6003, num df = 13, denom df = 12, p-value = 0.4235
 alternative hypothesis: true ratio of variances is not equal to 1
 95 percent confidence interval:
- 0.2696119 3.2532946
+ 0.4940296 5.0460008
 sample estimates:
 ratio of variances 
-         0.9365505 
+          1.600292 
 
-# p>0.05, then proceed to the next step
+# t-test
 t.test(x=age.d, y=age.c, var.equal=T, paired=F)
 
-t = -0.54167, df = 22, p-value = 0.5935
+	Two Sample t-test
+
+data:  age.d and age.c
+t = -0.38138, df = 25, p-value = 0.7061
 alternative hypothesis: true difference in means is not equal to 0
 95 percent confidence interval:
- -6.840659  4.007325
+ -6.716652  4.617751
 sample estimates:
 mean of x mean of y 
- 20.33333  21.75000 
+ 20.64286  21.69231 
 
-
-#############################################################
+##########################################################
 sessionInfo()
 R version 4.3.2 (2023-10-31)
 Platform: aarch64-apple-darwin22.6.0 (64-bit)
 Running under: macOS Sonoma 14.2.1
 
 Matrix products: default
-BLAS:   /opt/homebrew/Cellar/openblas/0.3.25/lib/libopenblasp-r0.3.25.dylib 
+BLAS:   /opt/homebrew/Cellar/openblas/0.3.26/lib/libopenblasp-r0.3.26.dylib 
 LAPACK: /opt/homebrew/Cellar/r/4.3.2/lib/R/lib/libRlapack.dylib;  LAPACK version 3.11.0
 
 locale:
@@ -319,16 +349,20 @@ attached base packages:
 [1] stats     graphics  grDevices utils     datasets  methods   base     
 
 other attached packages:
- [1] pROC_1.18.5     ggrepel_0.9.4   lubridate_1.9.3 forcats_1.0.0  
- [5] stringr_1.5.1   dplyr_1.1.4     purrr_1.0.2     readr_2.1.4    
- [9] tidyr_1.3.0     tibble_3.2.1    ggplot2_3.4.4   tidyverse_2.0.0
+ [1] cowplot_1.1.3   pROC_1.18.5     ggrepel_0.9.5   lubridate_1.9.3
+ [5] forcats_1.0.0   stringr_1.5.1   dplyr_1.1.4     purrr_1.0.2    
+ [9] readr_2.1.5     tidyr_1.3.1     tibble_3.2.1    ggplot2_3.4.4  
+[13] tidyverse_2.0.0
 
 loaded via a namespace (and not attached):
- [1] vctrs_0.6.5      cli_3.6.2        rlang_1.1.2      stringi_1.8.3   
- [5] generics_0.1.3   glue_1.6.2       colorspace_2.1-0 plyr_1.8.9      
- [9] hms_1.1.3        scales_1.3.0     fansi_1.0.6      grid_4.3.2      
-[13] munsell_0.5.0    tzdb_0.4.0       lifecycle_1.0.4  compiler_4.3.2  
-[17] Rcpp_1.0.11      timechange_0.2.0 pkgconfig_2.0.3  R6_2.5.1        
-[21] tidyselect_1.2.0 utf8_1.2.4       pillar_1.9.0     magrittr_2.0.3  
-[25] tools_4.3.2      withr_2.5.2      gtable_0.3.4    
+ [1] Matrix_1.6-5      gtable_0.3.4      compiler_4.3.2    tidyselect_1.2.0 
+ [5] Rcpp_1.0.12       textshaping_0.3.7 systemfonts_1.0.5 splines_4.3.2    
+ [9] scales_1.3.0      lattice_0.22-5    R6_2.5.1          plyr_1.8.9       
+[13] labeling_0.4.3    generics_0.1.3    munsell_0.5.0     pillar_1.9.0     
+[17] tzdb_0.4.0        rlang_1.1.3       utf8_1.2.4        stringi_1.8.3    
+[21] timechange_0.3.0  cli_3.6.2         mgcv_1.9-1        withr_3.0.0      
+[25] magrittr_2.0.3    grid_4.3.2        hms_1.1.3         nlme_3.1-164     
+[29] lifecycle_1.0.4   vctrs_0.6.5       glue_1.7.0        farver_2.1.1     
+[33] ragg_1.2.7        fansi_1.0.6       colorspace_2.1-0  tools_4.3.2      
+[37] pkgconfig_2.0.3 
 
