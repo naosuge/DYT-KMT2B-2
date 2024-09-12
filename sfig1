@@ -93,12 +93,6 @@ sampMerge[1:4, ]
 3 SRR10261844 pericardial fibroblast Cardiac System
 4 SRR10261845 pericardial fibroblast Cardiac System
 
-dim(sampMerge)
-[1] 2868    3
-[1] 2776    3
-[1] 1754    3
-
-
 files <- file.path(".", paste0(sampMerge$Run, ".genes.results"))
 names(files) <- paste0("sample", 1:1:nrow(sampMerge))
 txi.rsem <- tximport(files, type = "rsem", txIn = FALSE, txOut = FALSE)
